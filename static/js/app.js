@@ -62,7 +62,7 @@ function bindEvents() {
 
     document.getElementById("contactForm").addEventListener("submit", handleSaveContact);
 
-    // Base UI initialized
+    // Excel Export & Import
     document.getElementById("btnExportExcel").addEventListener("click", handleExportExcel);
     const fileInput = document.getElementById("excelFileInput");
     document.getElementById("btnImportExcel").addEventListener("click", () => fileInput.click());
