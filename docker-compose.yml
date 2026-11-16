@@ -1,0 +1,12 @@
+services:
+  address-book:
+    build: .
+    container_name: xp-address-book
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - SECRET_KEY=xp-address-book-cloud-prod-2026
+      - DATA_DIR=/app/data
