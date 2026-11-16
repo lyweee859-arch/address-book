@@ -131,3 +131,122 @@ def export_contacts_to_excel(contacts: List[Dict[str, Any]]) -> bytes:
     return buf.read()
 
 
+def generate_import_template() -> bytes:
+    sample_contacts = [
+        {
+            "name": "张明轩 (示例联系人)",
+            "category": "同事",
+            "company": "未来云科技有限公司",
+            "title": "后端架构师",
+            "bookmarked": True,
+            "notes": "多个联系方式可用分号 ; 分隔，支持“标签: 内容”格式",
+            "methods": [
+                {"method_type": "phone", "label": "手机", "value": "138-1234-5678"},
+                {"method_type": "phone", "label": "办公", "value": "0591-83210000"},
+                {"method_type": "email", "label": "工作邮箱", "value": "mingxuan@futurecloud.cn"},
+                {"method_type": "social", "label": "微信", "value": "zmx_cloud"},
+                {"method_type": "address", "label": "办公地址", "value": "福州市高新区创新园二期A座"},
+            ],
+        },
+        {
+            "name": "李语桐 (示例联系人)",
+            "category": "同学 / 项目组",
+            "company": "福州大学",
+            "title": "前端开发工程师",
+            "bookmarked": False,
+            "notes": "课程结对编程合作伙伴",
+            "methods": [
+                {"method_type": "phone", "label": "手机", "value": "159-8888-9999"},
+                {"method_type": "email", "label": "学校邮箱", "value": "yutong.li@fzu.edu.cn"},
+                {"method_type": "social", "label": "GitHub", "value": "github.com/liyutong"},
+                {"method_type": "address", "label": "宿舍地址", "value": "福州大学旗山校区学生公寓"},
+            ],
+        },
+    ]
+    return export_contacts_to_excel(sample_contacts)
+
+
+def parse_contacts_from_excel(file_bytes: bytes) -> Tuple[List[Dict[str, Any]], List[str]]:
+    wb = load_workbook(filename=io.BytesIO(file_bytes), data_only=True)
+    ws = wb.active
+
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        raise ValueError("Excel 文件为空，请检查文件内容 (Excel file is empty)")
+
+    raw_headers = [str(cell).strip() if cell is not None else "" for cell in rows[0]]
+    col_map = _map_columns(raw_headers)
+    if "name" not in col_map:
+        raise ValueError(
+            "未识别到“姓名 (Name)”列，请先下载并使用标准模板格式导入"
+        )
+
+    parsed_contacts: List[Dict[str, Any]] = []
+    warnings: List[str] = []
+
+    for row_idx, row in enumerate(rows[1:], start=2):
+        if not row or all(cell is None or str(cell).strip() == "" for cell in row):
+            continue
+
+        def get_val(field: str) -> str:
+            idx = col_map.get(field)
+            if idx is None or idx >= len(row) or row[idx] is None:
+                return ""
+            return str(row[idx]).strip()
+
+        name = get_val("name")
+        if not name:
+            warnings.append(f"第 {row_idx} 行缺少姓名，已跳过")
+            continue
+
+        category = get_val("category") or "未分类"
+        company = get_val("company")
+        title = get_val("title")
+        notes = get_val("notes")
+        bm_raw = get_val("bookmarked").lower()
+        bookmarked = bm_raw in ("是", "yes", "true", "1", "y", "收藏", "★", "⭐")
+
+        methods: List[Dict[str, str]] = []
+        methods.extend(_parse_methods_cell(get_val("phone"), "phone", "手机"))
+        methods.extend(_parse_methods_cell(get_val("email"), "email", "邮箱"))
+        methods.extend(_parse_methods_cell(get_val("social"), "social", "社交账号"))
+        methods.extend(_parse_methods_cell(get_val("address"), "address", "地址"))
+
+        parsed_contacts.append(
+            {
+                "name": name,
+                "category": category,
+                "company": company,
+                "title": title,
+                "notes": notes,
+                "bookmarked": bookmarked,
+                "methods": methods,
+            }
+        )
+
+    return parsed_contacts, warnings
+
+
+def _map_columns(headers: List[str]) -> Dict[str, int]:
+    mapping: Dict[str, int] = {}
+    aliases = {
+        "name": ["姓名", "name", "联系人", "full name"],
+        "category": ["分组", "分类", "类别", "category", "group", "tag"],
+        "company": ["公司", "单位", "学校", "组织", "company", "organization"],
+        "title": ["职位", "头衔", "职务", "title", "role", "position"],
+        "bookmarked": ["收藏", "书签", "星标", "bookmarked", "bookmark", "favorite", "star"],
+        "phone": ["电话", "手机", "号码", "phone", "mobile", "tel"],
+        "email": ["邮箱", "邮件", "电邮", "email", "e-mail", "mail"],
+        "social": ["社交", "微信", "qq", "github", "微博", "social", "wechat"],
+        "address": ["地址", "住址", "位置", "address", "location"],
+        "notes": ["备注", "说明", "简介", "notes", "note", "remark"],
+    }
+    for idx, h in enumerate(headers):
+        h_lower = h.lower()
+        for field, kw_list in aliases.items():
+            if field in mapping:
+                continue
+            if any(kw in h_lower for kw in kw_list):
+                mapping[field] = idx
+                break
+    return mapping

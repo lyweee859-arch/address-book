@@ -140,7 +140,55 @@ def create_app(test_config: dict | None = None) -> Flask:
             download_name=filename,
         )
 
-    
+    @app.route("/api/contacts/template", methods=["GET"])
+    def api_download_template():
+        template_bytes = generate_import_template()
+        return send_file(
+            io.BytesIO(template_bytes),
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name="address_book_import_template.xlsx",
+        )
+
+    @app.route("/api/contacts/import", methods=["POST"])
+    def api_import_excel():
+        if "file" not in request.files:
+            return jsonify({"error": "请选择要上传的 Excel (.xlsx) 文件"}), 400
+        file = request.files["file"]
+        if not file or not file.filename:
+            return jsonify({"error": "未选择文件"}), 400
+        if not file.filename.lower().endswith(".xlsx"):
+            return jsonify({"error": "仅支持 .xlsx 格式的 Excel 文件"}), 400
+
+        try:
+            file_bytes = file.read()
+            parsed_contacts, warnings = parse_contacts_from_excel(file_bytes)
+            if not parsed_contacts:
+                return (
+                    jsonify(
+                        {
+                            "error": "Excel 中未找到可导入的有效联系人记录",
+                            "warnings": warnings,
+                        }
+                    ),
+                    400,
+                )
+            imported_count = 0
+            for item in parsed_contacts:
+                db.create_contact(item, db_path=app.config.get("DATABASE_PATH"))
+                imported_count += 1
+            return jsonify(
+                {
+                    "message": f"成功导入 {imported_count} 位联系人",
+                    "imported_count": imported_count,
+                    "warnings": warnings,
+                }
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except Exception as exc:
+            return jsonify({"error": f"解析 Excel 文件失败: {exc}"}), 400
+
     return app
 
 
