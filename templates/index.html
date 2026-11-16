@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>星云通讯录 · Extreme Programming Address Book</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+    <!-- Top Navigation Header -->
+    <header class="top-header">
+        <div class="container header-inner">
+            <div class="brand">
+                <div class="brand-logo" aria-hidden="true">📒</div>
+                <h1 class="brand-title">星云智能通讯录</h1>
+            </div>
+            <div class="header-actions">
+                <a href="/api/contacts/template" class="btn btn-ghost" title="下载标准 Excel 导入模板">
+                    <span>📄 下载模板</span>
+                </a>
+                <button type="button" id="btnImportExcel" class="btn btn-secondary">
+                    <span>📥 导入 Excel</span>
+                </button>
+                <input type="file" id="excelFileInput" accept=".xlsx" hidden />
+                <button type="button" id="btnExportExcel" class="btn btn-secondary">
+                    <span>📤 导出 Excel</span>
+                </button>
+                <button type="button" id="btnAddContact" class="btn btn-primary">
+                    <span>＋ 新建联系人</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container main-content">
+        <!-- Stats Overview Row -->
+        <section class="stats-grid" aria-label="通讯录统计概览">
+            <div class="stat-card" id="statCardAll" role="button" tabindex="0">
+                <div class="stat-icon stat-icon-blue">👥</div>
+                <div class="stat-info">
+                    <span class="stat-label">全部联系人 (Total)</span>
+                    <strong class="stat-value" id="statTotalCount">0</strong>
+                </div>
+            </div>
+            <div class="stat-card stat-card-star" id="statCardBookmarked" role="button" tabindex="0">
+                <div class="stat-icon stat-icon-amber">⭐</div>
+                <div class="stat-info">
+                    <span class="stat-label">星标收藏 (Bookmarked)</span>
+                    <strong class="stat-value" id="statBookmarkedCount">0</strong>
+                </div>
+            </div>
+            <div class="stat-card" id="statCardCategories" role="button" tabindex="0" title="点击展开/收起分组快捷筛选">
+                <div class="stat-icon stat-icon-emerald">🏷️</div>
+                <div class="stat-info">
+                    <span class="stat-label">联系人分组 (Groups) · 点击筛选</span>
+                    <strong class="stat-value" id="statCategoryCount">0</strong>
+                </div>
+            </div>
+        </section>
+
+        <!-- Category Quick Filter Chips Panel -->
+        <section id="categoryChipsPanel" class="category-chips-panel hidden" aria-label="按分组快捷筛选">
+            <span class="chips-title">🏷️ 选择分组筛选：</span>
+            <div id="categoryChipsList" class="category-chips-list"></div>
+        </section>
+
+        <!-- Filter & Search Toolbar -->
+        <section class="toolbar">
+            <div class="filter-tabs" role="tablist">
+                <button type="button" class="tab-btn active" data-filter="all" id="tabAll">
+                    全部联系人 <span class="tab-badge" id="badgeAll">0</span>
+                </button>
+                <button type="button" class="tab-btn" data-filter="bookmarked" id="tabBookmarked">
+                    收藏夹 <span class="tab-badge tab-badge-star" id="badgeBookmarked">0</span>
+                </button>
+            </div>
+
+            <div class="toolbar-controls">
+                <div class="search-box">
+                    <span class="search-icon">🔍</span>
+                    <input
+                        type="search"
+                        id="searchInput"
+                        placeholder="搜索姓名、单位、电话、邮箱、社交账号或地址..."
+                        autocomplete="off"
+                    />
+                </div>
+                <select id="categoryFilter" class="select-control" aria-label="按分组筛选">
+                    <option value="ALL">全部分组 (All Groups)</option>
+                </select>
+                <div class="view-toggle" role="group" aria-label="视图切换">
+                    <button type="button" class="view-btn active" id="btnViewCards" title="卡片视图">卡片</button>
+                    <button type="button" class="view-btn" id="btnViewTable" title="表格视图">表格</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Contacts Container -->
+        <section id="contactsGrid" class="contacts-grid" aria-live="polite"></section>
+
+        <!-- Table View Container -->
+        <section id="contactsTableWrapper" class="table-wrapper hidden">
+            <table class="contacts-table">
+                <thead>
+                    <tr>
+                        <th style="width: 60px;">收藏</th>
+                        <th>姓名 / 职位</th>
+                        <th>分组</th>
+                        <th>电话号码</th>
+                        <th>电子邮箱</th>
+                        <th>社交账号</th>
+                        <th>联系地址</th>
+                        <th style="width: 130px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="contactsTableBody"></tbody>
+            </table>
+        </section>
+
+        <!-- Empty State -->
+        <section id="emptyState" class="empty-state hidden">
+            <div class="empty-icon">📭</div>
+            <h3 id="emptyTitle">暂无匹配的联系人</h3>
+            <p id="emptyDesc">点击右上角“＋ 新建联系人”添加第一条记录，或使用“📥 导入 Excel”批量导入。</p>
+        </section>
+    </main>
+
+    <!-- Add / Edit Contact Modal -->
+    <div id="contactModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 id="modalTitle">新建联系人</h2>
+                <button type="button" id="btnCloseModal" class="modal-close" aria-label="关闭">×</button>
+            </div>
+            <form id="contactForm" class="modal-body">
+                <input type="hidden" id="contactId" />
+
+                <div class="form-row">
+                    <div class="form-group flex-2">
+                        <label for="inputName">姓名 <span class="required">*</span></label>
+                        <input type="text" id="inputName" required placeholder="例如：林知远" />
+                    </div>
+                    <div class="form-group flex-1">
+                        <label for="inputCategory">分组标签</label>
+                        <input type="text" id="inputCategory" list="categorySuggestions" placeholder="例如：同学 / 同事 / 家人" />
+                        <datalist id="categorySuggestions">
+                            <option value="同学 / 项目组"></option>
+                            <option value="工作 / 导师"></option>
+                            <option value="朋友"></option>
+                            <option value="家人"></option>
+                            <option value="重要客户"></option>
+                        </datalist>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="inputCompany">公司 / 学校 / 单位</label>
+                        <input type="text" id="inputCompany" placeholder="例如：福州大学梅努斯国际工程学院" />
+                    </div>
+                    <div class="form-group">
+                        <label for="inputTitle">职位 / 角色</label>
+                        <input type="text" id="inputTitle" placeholder="例如：软件工程课程组长" />
+                    </div>
+                </div>
+
+                <div class="bookmark-check-row">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="inputBookmarked" />
+                        <span class="star-check-text">⭐ 将此联系人加入“星标收藏”（置顶显示，方便快速访问）</span>
+                    </label>
+                </div>
+
+                <!-- Multiple Contact Methods Section -->
+                <div class="methods-section">
+                    <div class="methods-header">
+                        <div>
+                            <h3>联系方式</h3>
+                            <p class="methods-hint">支持为同一位联系人添加多个电话号码、邮箱、社交账号和联系地址</p>
+                        </div>
+                        <div class="quick-add-btns">
+                            <button type="button" class="btn-chip" data-add-type="phone">＋ 电话</button>
+                            <button type="button" class="btn-chip" data-add-type="email">＋ 邮箱</button>
+                            <button type="button" class="btn-chip" data-add-type="social">＋ 社交账号</button>
+                            <button type="button" class="btn-chip" data-add-type="address">＋ 地址</button>
+                        </div>
+                    </div>
+                    <div id="methodsContainer" class="methods-list"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="inputNotes">备注说明</label>
+                    <textarea id="inputNotes" rows="2" placeholder="可选：记录联系人的备注信息..."></textarea>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" id="btnCancelModal" class="btn btn-secondary">取消</button>
+                    <button type="submit" class="btn btn-primary">💾 保存联系人</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toastContainer" class="toast-container" aria-live="assertive"></div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
