@@ -225,8 +225,7 @@ def update_contact(
         conn.close()
 
 
-# Bookmark helper added in Commit 09
-def _toggle_bookmark_placeholder(
+def toggle_bookmark(
     contact_id: int, bookmarked: Optional[bool] = None, db_path: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     existing = get_contact(contact_id, db_path=db_path)
