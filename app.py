@@ -115,6 +115,31 @@ def create_app(test_config: dict | None = None) -> Flask:
             return jsonify({"error": "未找到该联系人 (Contact not found)"}), 404
         return jsonify({"message": "联系人已删除", "id": contact_id})
 
+    @app.route("/api/contacts/export", methods=["GET"])
+    def api_export_excel():
+        bookmarked_only = request.args.get("bookmarked", "0").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        search = request.args.get("search", "")
+        category = request.args.get("category", "ALL")
+        contacts = db.list_contacts(
+            search=search,
+            category=category,
+            bookmarked_only=bookmarked_only,
+            db_path=app.config.get("DATABASE_PATH"),
+        )
+        excel_bytes = export_contacts_to_excel(contacts)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"address_book_contacts_{timestamp}.xlsx"
+        return send_file(
+            io.BytesIO(excel_bytes),
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=filename,
+        )
+
     
     return app
 
